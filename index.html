@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PWA-Geotag</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+
+        body{
+            color: #fff;
+            background-color: #2B2F3C;
+            font-size: 16px;
+        }
+        @media screen and (max-width: 480px){
+            video{
+               width: 330px;
+               height: 450px;
+            }
+            #image-container > img {
+                width: 330px;
+                height: 450px;
+            }
+
+        }
+        
+        h3, span, p, button{
+            font-family: Helvetica, sans-serif;
+        }
+
+        button{
+            border-radius: 5px;
+            border: none;
+        }
+    </style>
+</head>
+
+<body>
+    <h1 style="text-align: center;">PWA-Geotag</h1>
+    <div id="main">
+        <p style="text-align: center;">Please allow permission for your camera and location.</p>
+        <div style="display: flex; flex-direction: column; justify-content: center; align-items: center;">
+            <video id="video" width="650" height="550" autoplay></video>
+        </div>
+    
+        <div style="display: flex; justify-content: center;">
+            <button id="capture-btn" style="padding: 16px; margin-top: 5px;">
+                <span id="btn-text">Capture</span>
+                <span id="loading-icon" style="display: none;">Loading</span>
+            </button>
+        </div>
+    </div>
+
+    <canvas id="canvas" style="display: none;" width="720" height="960"></canvas>
+
+    <div style="display: flex; flex-direction: column; justify-content: center; align-items: center;">
+        <p id="success-text" style="display: none;"><span style="color: #00f929; font-weight: 600;">SUCCESS!</span> Your picture is uploaded.</p>
+        <div id="image-container"></div>
+        <button id="close-btn" style="padding: 16px; margin-top: 5px; display:none;">OK</button>
+    </div>
+
+    <script src="pwa.js"></script>
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const captureButton = document.getElementById('capture-btn');
+        const imageContainer = document.getElementById('image-container');
+
+        // Function to access the back camera
+        function getBackCamera() {
+            navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: 'environment' // Use the back camera
+                }
+            })
+            .then(stream => video.srcObject = stream)
+            .catch(error => {
+                console.error('Error accessing back camera:', error);
+                // If the back camera is not available, use the front camera
+                getFrontCamera();
+            });
+        }
+
+        // Function to access the front camera
+        function getFrontCamera() {
+            navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: 'user' // Use the front camera
+                }
+            })
+            .then(stream => video.srcObject = stream)
+            .catch(error => {
+                console.error('Error accessing front camera:', error);
+            });
+        }
+
+        // Start by trying to access the back camera
+        getBackCamera();
+
+        captureButton.addEventListener('click', () => {
+
+            var btnText = document.getElementById('btn-text');
+            var loadingIcon = document.getElementById('loading-icon');
+
+            // Show the loading icon and hide the button text
+            btnText.style.display = 'none';
+            loadingIcon.style.display = 'inline-block';
+
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Convert canvas data to base64
+            const imageData = canvas.toDataURL('image/jpeg');
+
+            // Get geolocation
+            navigator.geolocation.getCurrentPosition(
+                position => {
+
+                    const latitude = position.coords.latitude;
+                    const longitude = position.coords.longitude;
+                    // Send the image data and geolocation to PHP
+                    const xhr = new XMLHttpRequest();
+
+                    xhr.open('POST', 'geotagging', true);
+
+                    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+
+                    xhr.responseType = 'blob';
+
+                    xhr.onload = function() {
+
+                        if (xhr.status === 200) {
+
+                            btnText.style.display = 'inline-block';
+                            loadingIcon.style.display = 'none';
+                    
+                            // Convert the response blob to an object URL
+                            const imageUrl = URL.createObjectURL(xhr.response);
+
+                            // Display the geotagged image on the page
+                            const geotaggedImage = new Image();
+
+                            geotaggedImage.src = imageUrl;
+                            imageContainer.innerHTML = '';
+                            imageContainer.appendChild(geotaggedImage);
+
+                            document.getElementById('main').style.display = 'none';
+                            document.getElementById('success-text').style.display = 'block';
+                            document.getElementById('close-btn').style.display = 'block';
+                        }
+                    };
+                    xhr.send(`imageData=${encodeURIComponent(imageData)}&latitude=${latitude}&longitude=${longitude}`);
+                },
+                error => console.error('Error getting geolocation:', error)
+            );
+        });
+
+        document.getElementById('close-btn').addEventListener('click', function() {
+            // Refresh the page to reset to initial state
+            window.location.reload();
+        });
+    </script>
+</body>
+</html>
+
